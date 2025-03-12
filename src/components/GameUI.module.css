@@ -1,0 +1,41 @@
+.uiContainer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    padding: 1rem;
+    display: flex;
+    justify-content: space-between;
+    pointer-events: none;
+    z-index:10;
+  }
+  
+  .stats {
+    background: rgba(0,0,0,0.7);
+    color: white;
+    padding: 1rem;
+    border-radius: 8px;
+    display: flex;
+    gap: 1rem;
+  }
+  
+  .toolbar {
+    pointer-events: auto;
+  }
+  
+  .toolButton {
+    padding: 0.5rem 1rem;
+    background: white;
+    border: 2px solid #666;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  
+  .toolButton:hover {
+    background: #eee;
+  }
+
+  .toolButton.active {
+    background: #e0e0e0;
+    border-color: #333;
+  }

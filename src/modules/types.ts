@@ -24,6 +24,7 @@ export interface ModuleConfig {
   description: string;
   cost: number;
   icon?: string;
+  supportsDrag?: boolean; // Whether this module type supports drag placement
 }
 
 export interface GameModule {
@@ -44,4 +45,9 @@ export interface GameModule {
   onHover?(position: Position | null): void;
   validate?(position: Position): boolean;
   getPreviewMesh?(): THREE.Mesh | null;
+  
+  // Drag support
+  onDragStart?(position: Position): void;
+  onDragMove?(position: Position): void;
+  onDragEnd?(position: Position): void;
 }
