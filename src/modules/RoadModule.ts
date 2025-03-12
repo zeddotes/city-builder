@@ -3,7 +3,7 @@ import { BaseModule } from './BaseModule';
 import { ModuleObject, Position } from './types';
 
 export class RoadModule extends BaseModule {
-  private roadGeometry: THREE.BoxGeometry;
+  private roadGeometry: THREE.BufferGeometry;
   private roadMaterial: THREE.MeshStandardMaterial;
   private previewMesh: THREE.Mesh | null = null;
 
@@ -15,12 +15,22 @@ export class RoadModule extends BaseModule {
       icon: '🛣️',
     });
 
-    // Create geometries and materials
-    this.roadGeometry = new THREE.BoxGeometry(1, 0.1, 1);
+    // Create road geometry to exactly fill a grid cell
+    const geometry = new THREE.BoxGeometry(1, 0.1, 1);
+    
+    // Create material with improved appearance
     this.roadMaterial = new THREE.MeshStandardMaterial({
-      color: 0x333333,
-      roughness: 0.8,
+      color: 0x444444,
+      roughness: 0.9,
+      metalness: 0.1,
+      envMapIntensity: 0.5,
+      side: THREE.DoubleSide, // Ensure both sides are visible
     });
+    
+    // Center the geometry in its local space
+    geometry.translate(0.5, 0.05, 0.5);
+    
+    this.roadGeometry = geometry;
   }
 
   init(scene: THREE.Scene): void {
@@ -30,63 +40,124 @@ export class RoadModule extends BaseModule {
     const previewMaterial = new THREE.MeshStandardMaterial({
       color: 0x33aa33,
       transparent: true,
-      opacity: 0.5,
-      roughness: 0.8,
-      depthWrite: false, // Prevent z-fighting
+      opacity: 0.7,
+      roughness: 0.6,
+      metalness: 0.3,
+      depthWrite: true,
+      emissive: 0x225522,
+      emissiveIntensity: 0.3,
+      // Enable blending for smoother transparency
+      blending: THREE.NormalBlending,
+      // Ensure transparent objects render in the correct order
+      depthTest: true,
+      side: THREE.DoubleSide,
     });
 
-    this.previewMesh = new THREE.Mesh(
-      this.roadGeometry,
-      previewMaterial
-    );
+    // Create preview mesh using the same geometry as the road
+    const previewGeometry = this.roadGeometry.clone();
+    this.previewMesh = new THREE.Mesh(previewGeometry, previewMaterial);
     
-    // Position slightly above ground to prevent z-fighting
-    this.previewMesh.position.y = 0.05;
+    // Position at origin (geometry is pre-centered)
+    this.previewMesh.position.set(0, 0, 0);
+    
+    // Log preview setup
+    console.log('Preview mesh initialized:', {
+      position: this.previewMesh.position.toArray(),
+      rotation: this.previewMesh.rotation.toArray(),
+      visible: this.previewMesh.visible
+    });
     this.previewMesh.visible = false;
     
+    // Enable shadows
+    this.previewMesh.castShadow = true;
+    this.previewMesh.receiveShadow = true;
+    
+    // Add the preview mesh to the scene
     scene.add(this.previewMesh);
-    console.log('Preview mesh created and added to scene');
+    console.log('Preview mesh created and added to scene for RoadModule');
+    
+    // Log initial state
+    console.log('RoadModule initialized:', {
+      geometryType: this.roadGeometry.type,
+      materialColor: this.roadMaterial.color.getHexString(),
+      previewExists: !!this.previewMesh,
+      sceneChildren: scene.children.length,
+      previewPosition: this.previewMesh.position.toArray(),
+      previewRotation: this.previewMesh.rotation.toArray()
+    });
   }
 
   cleanup(scene: THREE.Scene): void {
     super.cleanup(scene);
     if (this.previewMesh) {
       scene.remove(this.previewMesh);
+      this.previewMesh.geometry.dispose();
+      if (this.previewMesh.material instanceof THREE.Material) {
+        this.previewMesh.material.dispose();
+      }
       this.previewMesh = null;
     }
   }
 
   place(position: Position, scene: THREE.Scene): ModuleObject | null {
+    console.log('Attempting to place road at position:', position);
+    
     // Only place if position is valid
     if (!this.validate(position)) {
+      console.log('Invalid position for road placement');
       return null;
     }
 
-    const mesh = new THREE.Mesh(this.roadGeometry, this.roadMaterial.clone());
-    mesh.position.set(position.x, 0.05, position.z);
+    try {
+      // Create a new mesh for the road
+      const mesh = new THREE.Mesh(this.roadGeometry.clone(), this.roadMaterial.clone());
+      
+      // Position at grid coordinates (geometry is pre-centered)
+      mesh.position.set(position.x, 0, position.z);
+      
+      // Log placement for debugging
+      console.log('Road placed at:', {
+        gridPosition: position,
+        meshPosition: mesh.position.toArray(),
+        meshRotation: mesh.rotation.toArray(),
+        meshScale: mesh.scale.toArray()
+      });
+      
+      // Enable shadows
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
 
-    const roadObject: ModuleObject = {
-      id: this.generateId(),
-      type: 'road',
-      position,
-      mesh,
-      cost: this.config.cost,
-    };
+      const roadObject: ModuleObject = {
+        id: this.generateId(),
+        type: 'road',
+        position,
+        mesh,
+        cost: this.config.cost,
+      };
 
-    scene.add(mesh);
-    this.objects.push(roadObject);
-    this.updateRoadConnections();
+      // Add to scene and track the object
+      scene.add(mesh);
+      this.objects.push(roadObject);
+      
+      // Update road connections
+      this.updateRoadConnections();
+      
+      // Log placement details
+      console.log('Road placement details:', {
+        position: mesh.position.toArray(),
+        rotation: mesh.rotation.toArray(),
+        inScene: scene.children.includes(mesh),
+        objectsCount: this.objects.length
+      });
 
-    // Show preview mesh again after placement
-    if (this.previewMesh) {
-      this.previewMesh.visible = true;
+      return roadObject;
+    } catch (error) {
+      console.error('Error placing road:', error);
+      return null;
     }
-
-    return roadObject;
   }
 
   onHover(position: Position | null): void {
-    console.log('Hovering at position:', position);
     if (!this.previewMesh) {
       console.log('No preview mesh available');
       return;
@@ -97,28 +168,50 @@ export class RoadModule extends BaseModule {
       return;
     }
 
+    // Update preview mesh position and visibility
     this.previewMesh.visible = true;
-    this.previewMesh.position.set(position.x, 0.05, position.z);
+    this.previewMesh.position.set(position.x, 0, position.z);
 
+    // Check if position is valid for placement
     const isValid = this.validate(position);
-    console.log('Position valid:', isValid);
 
-    // Update preview color based on validity
+    // Update preview appearance based on validity
     if (this.previewMesh.material instanceof THREE.MeshStandardMaterial) {
+      // Set color (green for valid, red for invalid)
       this.previewMesh.material.color.setHex(
         isValid ? 0x33aa33 : 0xff3333
       );
+      
+      // Adjust opacity based on validity
+      this.previewMesh.material.opacity = isValid ? 0.7 : 0.5;
+      
+      // Add emissive glow for better visibility
+      this.previewMesh.material.emissive.setHex(
+        isValid ? 0x225522 : 0x552222
+      );
+      this.previewMesh.material.emissiveIntensity = 0.3;
     }
+    
+    // Log hover state
+    console.log('Road hover state:', {
+      position: this.previewMesh.position.toArray(),
+      rotation: this.previewMesh.rotation.toArray(),
+      isValid,
+      visible: this.previewMesh.visible
+    });
   }
 
   validate(position: Position): boolean {
     // Check if there's already a road at this position
-    return !this.objects.some(
+    const existingRoad = this.objects.some(
       obj => obj.position.x === position.x && obj.position.z === position.z
     );
+    
+    return !existingRoad;
   }
 
   getPreviewMesh(): THREE.Mesh | null {
+    console.log('Getting preview mesh for RoadModule, exists:', !!this.previewMesh);
     return this.previewMesh;
   }
 
